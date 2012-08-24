@@ -1914,6 +1914,7 @@ CONFIG_MSM_VPE=y
 # CONFIG_S5K6A1GX is not set
 # CONFIG_S5K6AAFX is not set
 # CONFIG_OV8830 is not set
+CONFIG_MSM_V4L2_VIDEO_OVERLAY_DEVICE=y
 
 #
 # Graphics support
