@@ -37,11 +37,10 @@
 
 #define VIVOW_SDMC_CD_N_TO_SYS PM8058_GPIO_PM_TO_SYS(VIVOW_GPIO_SDMC_CD_N)
 
-extern int msm_add_sdcc(unsigned int controller, struct mmc_platform_data *plat,
-			unsigned int stat_irq, unsigned long stat_irq_flags);
+extern int msm_add_sdcc(unsigned int controller, struct mmc_platform_data *plat);
 
 /* ---- SDCARD ---- */
-
+#if 0
 static uint32_t sdcard_on_gpio_table[] = {
 	PCOM_GPIO_CFG(58, 1, GPIO_OUTPUT, GPIO_PULL_DOWN, GPIO_16MA), /* CLK */
 	PCOM_GPIO_CFG(59, 1, GPIO_INPUT, GPIO_NO_PULL, GPIO_10MA), /* CMD */
@@ -82,17 +81,7 @@ static int __init vivow_disablesdcard_setup(char *str)
 	return 1;
 }
 
-__setup("board_vivo_w.disable_sdcard=", vivow_disablesdcard_setup);
-
-static int __init vivow_ct_disablesdcard_setup(char *str)
-{
-	int cal = simple_strtol(str, NULL, 0);
-
-	opt_disable_sdcard = cal;
-	return 1;
-}
-
-__setup("board_vivo_w_ct.disable_sdcard=", vivow_ct_disablesdcard_setup);
+__setup("board_vivow.disable_sdcard=", vivow_disablesdcard_setup);
 
 static struct vreg *vreg_sdslot;	/* SD slot power */
 
@@ -159,9 +148,11 @@ static unsigned int vivow_sdslot_status(struct device *dev)
 
 	return (!status);
 }
+#endif
 
 #define VIVOW_MMC_VDD		(MMC_VDD_28_29 | MMC_VDD_29_30)
 
+#if 0
 static unsigned int vivow_sdslot_type = MMC_TYPE_SD;
 
 static struct mmc_platform_data vivow_sdslot_data = {
@@ -179,7 +170,7 @@ static struct mmc_platform_data vivow_movinand_data = {
 	.slot_type	= &vivow_emmcslot_type,
 	.mmc_bus_width  = MMC_CAP_8_BIT_DATA,
 };
-
+#endif
 /* ---- WIFI ---- */
 
 static uint32_t wifi_on_gpio_table[] = {
@@ -201,6 +192,19 @@ static uint32_t wifi_off_gpio_table[] = {
 	PCOM_GPIO_CFG(110, 0, GPIO_OUTPUT, GPIO_NO_PULL, GPIO_4MA), /* CLK */
 	PCOM_GPIO_CFG(147, 0, GPIO_OUTPUT, GPIO_NO_PULL, GPIO_4MA), /* WLAN IRQ */
 };
+
+static void config_gpio_table(uint32_t *table, int len)
+{
+		int n, rc;
+		for (n = 0; n < len; n++) {
+				rc = gpio_tlmm_config(table[n], GPIO_CFG_ENABLE);
+				if (rc) {
+						pr_err("%s: gpio_tlmm_config(%#x)=%d\n",
+								__func__, table[n], rc);
+						break;
+				}
+		}
+}
 
 /* BCM4329 returns wrong sdio_vsn(1) when we read cccr,
  * we use predefined value (sdio_vsn=2) here to initial sdio driver well
@@ -237,11 +241,18 @@ static unsigned int vivow_wifi_status(struct device *dev)
 	return vivow_wifi_cd;
 }
 
+static unsigned int vivow_wifislot_type = MMC_TYPE_SDIO_WIFI;
 static struct mmc_platform_data vivow_wifi_data = {
 	.ocr_mask		= MMC_VDD_28_29,
 	.status			= vivow_wifi_status,
 	.register_status_notify	= vivow_wifi_status_register,
 	.embedded_sdio		= &vivow_wifi_emb_data,
+	.slot_type          = &vivow_wifislot_type,
+		.mmc_bus_width  = MMC_CAP_4_BIT_DATA,
+		.msmsdcc_fmin   = 144000,
+		.msmsdcc_fmid   = 24576000,
+		.msmsdcc_fmax   = 49152000,
+		.nonremovable   = 0,
 };
 
 int vivow_wifi_set_carddetect(int val)
@@ -256,6 +267,7 @@ int vivow_wifi_set_carddetect(int val)
 }
 EXPORT_SYMBOL(vivow_wifi_set_carddetect);
 
+#if 0
 static struct pm8058_gpio pmic_gpio_sleep_clk_output = {
 	.direction      = PM_GPIO_DIR_OUT,
 	.output_buffer  = PM_GPIO_OUT_BUF_CMOS,
@@ -270,7 +282,7 @@ static struct pm8058_gpio pmic_gpio_sleep_clk_output = {
 #define ID_BT	1
 #define CLK_OFF	0
 #define CLK_ON	1
-static DEFINE_SPINLOCK(vivow_w_b_slock);
+static DEFINE_SPINLOCK(vivo_w_b_slock);
 int vivow_sleep_clk_state_wifi = CLK_OFF;
 int vivow_sleep_clk_state_bt = CLK_OFF;
 
@@ -281,7 +293,7 @@ int vivow_wifi_bt_sleep_clk_ctl(int on, int id)
 
 	printk(KERN_DEBUG "%s ON=%d, ID=%d\n", __func__, on, id);
 
-	spin_lock_irqsave(&vivow_w_b_slock, flags);
+	spin_lock_irqsave(&vivo_w_b_slock, flags);
 	if (on) {
 		if ((CLK_OFF == vivow_sleep_clk_state_wifi)
 			&& (CLK_OFF == vivow_sleep_clk_state_bt)) {
@@ -291,7 +303,7 @@ int vivow_wifi_bt_sleep_clk_ctl(int on, int id)
 					VIVOW_GPIO_WIFI_BT_SLEEP_CLK_EN,
 					&pmic_gpio_sleep_clk_output);
 			if (err) {
-				spin_unlock_irqrestore(&vivow_w_b_slock,
+				spin_unlock_irqrestore(&vivo_w_b_slock,
 							flags);
 				printk(KERN_DEBUG "ERR EN SLEEP CLK, ERR=%d\n",
 					err);
@@ -314,7 +326,7 @@ int vivow_wifi_bt_sleep_clk_ctl(int on, int id)
 					VIVOW_GPIO_WIFI_BT_SLEEP_CLK_EN,
 					&pmic_gpio_sleep_clk_output);
 			if (err) {
-				spin_unlock_irqrestore(&vivow_w_b_slock,
+				spin_unlock_irqrestore(&vivo_w_b_slock,
 							flags);
 				printk(KERN_DEBUG "ERR DIS SLEEP CLK, ERR=%d\n",
 					err);
@@ -329,11 +341,12 @@ int vivow_wifi_bt_sleep_clk_ctl(int on, int id)
 		else
 			vivow_sleep_clk_state_wifi = CLK_OFF;
 	}
-	spin_unlock_irqrestore(&vivow_w_b_slock, flags);
+	spin_unlock_irqrestore(&vivo_w_b_slock, flags);
 
 	return 0;
 }
 EXPORT_SYMBOL(vivow_wifi_bt_sleep_clk_ctl);
+#endif
 
 int vivow_wifi_power(int on)
 {
@@ -347,7 +360,7 @@ int vivow_wifi_power(int on)
 				ARRAY_SIZE(wifi_off_gpio_table));
 	}
 
-	vivow_wifi_bt_sleep_clk_ctl(on, ID_WIFI);
+	/*vivow_wifi_bt_sleep_clk_ctl(on, ID_WIFI);*/
 	gpio_set_value(VIVOW_GPIO_WIFI_SHUTDOWN_N, on); /* WIFI_SHUTDOWN */
 	mdelay(120);
 	return 0;
@@ -364,23 +377,26 @@ int __init vivow_init_mmc(unsigned int sys_rev)
 {
 	uint32_t id;
 	wifi_status_cb = NULL;
-	sdslot_vreg_enabled = 0;
+	/*sdslot_vreg_enabled = 0;*/
 
 	printk(KERN_INFO "vivow: %s\n", __func__);
 	/* SDC2: MoviNAND */
+#if 0
 	register_msm_irq_mask(INT_SDC2_0);
 	register_msm_irq_mask(INT_SDC2_1);
 	config_gpio_table(movinand_on_gpio_table,
 			  ARRAY_SIZE(movinand_on_gpio_table));
 	msm_add_sdcc(2, &vivow_movinand_data, 0, 0);
+#endif
 
 	/* initial WIFI_SHUTDOWN# */
 	id = PCOM_GPIO_CFG(VIVOW_GPIO_WIFI_SHUTDOWN_N, 0, GPIO_OUTPUT, GPIO_NO_PULL, GPIO_2MA),
 	msm_proc_comm(PCOM_RPC_GPIO_TLMM_CONFIG_EX, &id, 0);
 	gpio_set_value(VIVOW_GPIO_WIFI_SHUTDOWN_N, 0);
 
-	msm_add_sdcc(3, &vivow_wifi_data, 0, 0);
+	msm_add_sdcc(3, &vivow_wifi_data);
 
+#if 0
 	register_msm_irq_mask(INT_SDC4_0);
 	register_msm_irq_mask(INT_SDC4_1);
 
@@ -399,7 +415,7 @@ int __init vivow_init_mmc(unsigned int sys_rev)
 			MSM_GPIO_TO_INT(VIVOW_SDMC_CD_N_TO_SYS),
 			IORESOURCE_IRQ_LOWEDGE | IORESOURCE_IRQ_HIGHEDGE);
 done:
-
+#endif
 	/* reset eMMC for write protection test */
 	gpio_set_value(VIVOW_GPIO_EMMC_RST, 0);	/* this should not work!!! */
 	udelay(100);
